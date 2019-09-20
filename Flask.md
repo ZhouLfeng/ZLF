@@ -434,6 +434,7 @@ session:
 2.所有数据保存在服务器中
 3.默认存在服务器中的内存中
 4.存储形式采用键值对方式
+使用session需要在__init__方法中配置app.config['SESSION_KEY']='110'        # 密钥
 ```
 
 ```python
@@ -446,6 +447,448 @@ session使用:
 ```
 
 ```python
+session持久化问题
+-django默认为session做了持久化，就是存储在数据库中
+-fask默认并没有为session作持久化处理，需要修改session配置
+flask-session可以实现session的数据持久化
+通常使用redis来进行存储
+缓存在磁盘上时，管理磁盘文件使用lru，最近最少使用原则
+持久化位置设定：
+				app.config['SESSION_TYPE'] = 'redis'
+初始化session对象：
+				Session(app=app)
+    			session = Session()       session.init_app(app=app)
+查看redis内容：
+				redis -cli
+    			keys *
+        		get key
+            	ttl session    查看session存活天数     flask默认31天，django默认14天
+```
 
+### Template
+
+```python
+MVC中的V，MTV中的T
+主要用来作数据展示用
+模板处理过程分为两个阶段：1.加载   2.渲染
+jinjia2模板引擎：
+	1.本质上是html
+    2.支持特定的模板语法
+    3.flask作者开发
+    4.优点：
+    		速度快，被广泛使用
+        	HTML设计和后端python分离
+            减少python的复杂度
+            非常灵活，快速和安全
+            提供了控制，继承等高级功能
+```
+
+```python
+模板：
+	1.静态页面，前后端分离
+    2.模板语言动态生成html
+    	{{ var }}:接收变量
+        {% tar %}：结构标签
+        			block:模板中为挖坑操作，子模板中可作填坑操作，不想被覆盖，需要添加{{ super() }}
+    宏定义：
+    	无参
+    	{% macro  say() %}
+        
+        {% endmacro %}
+        
+         有参
+        {% macro  say(name) %}
+       	{{ name }}
+        {% endmacro %}
+        
+        外文件调用
+        {% macro  say(name) %}
+       	{{ name }}
+        {% endmacro %}
+        
+        {% from 'html文件' import x %}
+        {% say('action') %}
+        
+        
+循环控制：
+		{% for i in range(10) %}
+    			{{ loop.first }}第一个
+        		{{ loop.last }}最后一个
+            	{{ loop.index }}索引
+        {% endfor %}
+选择：
+		{% if 条件 %}
+    			语句
+        {% elif  条件 %}
+        		语句
+        {% else %}
+        		语句
+        {% fi %}
+过滤器：
+		{{ var|xxx|yyy|zzz }}
+    	没有数量限制
+        lower:小写
+        upper:大写
+        trim:去左右空格
+        reverse:反转
+        striptags:渲染之前将值中的标签去掉
+        safe:标签生效
+```
+
+### models
+
+```python
+1.数据交互的封装
+2.flask默认并没有提供任何数据库操作的api
+	flask可以自己选择数据库，用原生语句实现功能，但原生语句冗余太多，代码利用率低，条件复杂的语句很长，所以不会选择原生sql
+SQLAlchemy、MongoEngine：
+	将对象的操作转换为原生SQL
+    优点：
+    	易用性，可以有效减少重复sql
+        性能损耗少
+        设计灵活，可以轻松实现复杂查询
+        移植性好
+3.flask中并没有提供默认的ORM
+	orm：对象关系映射
+    通过操作对象，实现对数据的操作
+```
+
+```python
+flask-sqlalchemy:
+    安装：pip install flask-sqlalchemy
+    创建sqlalchemy对象:
+        1. db = SQLAlchemy(app = app)
+        2. db = SQLAlchemy()   ----放在models模块中
+           db.init_app(app=app)----放在__init__模块中
+    __init__中配置sqlalchemy：
+    	app.config['SQLALCHEMY_DATABASE_URI']=
+        		'dialect+driver://username:password@host:prot/database'
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS']=False
+   	创建表示必须要创建主键并且给定字符长度
+```
+
+```python
+使用:
+    定义模型：继承sqlalchenmy对象中的model
+    定义字段：字段名=db.Colum(字段类型)
+    		一定要添加一个主键
+    创建表：db.create_all()
+    删除表：db.drop_all()
+    修改表名：__tablename__=''   在models中修改
+    数据操作:
+        添加：db.session.add(对象)
+        	 db.sesssion.commit    ----提交
+       	查询：模型名.query.all()
+```
+
+### 项目拆分
+
+```python
+1. 4种不同的测试环境:
+      开发环境(develop)
+      测试环境(test)
+      演示环境(show)
+      线上环境(product)
+2. 拆分项目
+	  规划项目结构
+    	manager.py
+        	app的创建
+            Manager(flask-script管理对象)
+        App
+          __init__:
+                创建Flask对象(create_app)
+                加载settings文件
+                调用init_ext方法
+                调用init_blue方法
+          settings:
+            	App运行的环境配置
+                运行环境
+          ext:
+            	用来初始化第三方插件
+                sqlalchemy对象初始化 数据库
+                session初始化
+          views:
+            	蓝图
+                创建
+                注册到app上
+          models:
+            	定义模型
+```
+
+```python
+__init__.py:
+    from flask import Flask
+
+	from App import settings
+	from App.ext import init_ext
+
+
+	def create_app(way):
+        app = Flask(__name__)
+
+        app.config.from_object(settings.env_name[way])
+
+        init_ext(app)
+
+        return app
+
+```
+
+```python
+ext.py:
+    from flask_migrate import Migrate
+    from flask_session import Session
+
+    from App.models import db
+
+
+    def init_ext(app):
+        app.config['SECRET_KEY'] = '110'
+
+        app.config['SESSION_TYPE'] = 'redis'
+        app.config['SESSION_KEY_PREFIX'] = 'PYTHON'
+        Session(app=app)
+
+        db.init_app(app=app)
+
+        migrate = Migrate()
+        migrate.init_app(app=app,db=db)
+```
+
+```python
+models.py:
+    from flask_sqlalchemy import SQLAlchemy
+
+    db = SQLAlchemy()
+
+
+    class User1(db.Model):
+        id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+        name = db.Column(db.String(32))
+
+    class Emp(db.Model):
+        id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+        name = db.Column(db.String(32))
+```
+
+```python
+settings.py:
+    def get_database_uri(DATABASE):
+        dialect = DATABASE.get('dialect')
+        driver = DATABASE.get('driver')
+        username = DATABASE.get('username')
+        password = DATABASE.get('password')
+        host = DATABASE.get('host')
+        port = DATABASE.get('port')
+        database = DATABASE.get('database')
+        return '{}+{}://{}:{}@{}:{}/{}'.format(dialect, driver, username, password, host, port, database)
+
+
+    class Config():
+        Test = False
+        Debug = False
+        SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+
+    class developConfig(Config):
+        Debug = True
+        DATABASE = {
+            'dialect': 'mysql',
+            'driver': 'pymysql',
+            'username': 'z',
+            'password': '123321',
+            'host': 'localhost',
+            'port': '3306',
+            'database': 'day04'
+        }
+        SQLALCHEMY_DATABASE_URI = get_database_uri(DATABASE)
+
+
+    class testConfig(Config):
+        Test = True
+        DATABASE = {
+            'dialect': 'mysql',
+            'driver': 'pymysql',
+            'username': 'z',
+            'password': '123321',
+            'host': 'localhost',
+            'port': '3306',
+            'database': 'day04'
+        }
+        SQLALCHEMY_DATABASE_URI = get_database_uri(DATABASE)
+
+
+    class showConfig(Config):
+        Debug = True
+        DATABASE = {
+            'dialect': 'mysql',
+            'driver': 'pymysql',
+            'username': 'z',
+            'password': '123321',
+            'host': 'localhost',
+            'port': '3306',
+            'database': 'day04'
+        }
+        SQLALCHEMY_DATABASE_URI = get_database_uri(DATABASE)
+
+
+    class productConfig(Config):
+        Debug = True
+        DATABASE = {
+            'dialect': 'mysql',
+            'driver': 'pymysql',
+            'username': 'z',
+            'password': '123321',
+            'host': 'localhost',
+            'port': '3306',
+            'database': 'day04'
+        }
+        SQLALCHEMY_DATABASE_URI = get_database_uri(DATABASE)
+
+
+    env_name = {
+        'develop': developConfig,
+        'test': testConfig,
+        'show': showConfig,
+        'product': productConfig,
+    }
+
+```
+
+```python
+views.py:
+    from flask import Blueprint
+    from App.models import db
+    blue = Blueprint('blue', __name__)
+
+    @blue.route('/')
+    def hello_world():
+        return 'Hello World!'
+
+    @blue.route('/addUser/')
+    def addUser():
+        db.create_all()
+        return '创建成功'
+```
+
+```python
+manager.py:
+    from flask_migrate import MigrateCommand
+    from flask_script import Manager
+    from App import create_app
+    from App.views import blue
+
+    # way = input('选择模式(develop,test,show,product):')
+
+    app = create_app(way='develop')
+
+    manager = Manager(app=app)
+
+    app.register_blueprint(blueprint=blue)
+
+    manager.add_command('db',MigrateCommand)
+
+    if __name__ == '__main__':
+        manager.run()
+```
+
+### flask-migrate
+
+```python
+1. 安装：pip install flask-migrate
+2. 初始化
+   -创建migrate对象，将app和db初始化，代码放在ext中
+    	migrate = Migrate()
+    	migrate.init_app(app=app,db=db)
+   -懒加载初始化
+		在manager中添加command(MigrateCommand)
+    		manager.add_command('db',MigrateCommand)
+3. 终端命令代码
+	python  manager.py  db  ~~~
+    -init  第一次使用，初始化
+    -migrate  生成迁移文件    可加'-message “名称”'备注
+    		不能生成有两种情况：模型定义从未调用过；数据库已有模型记录
+    -upgrade  升级
+    -downgrade  降级
+```
+
+### DML
+
+```python
+DDL：数据定义语言
+	针对表操作：create   alter  drop
+DML：数据操纵语言
+	针对数据操作：insert   delete   update
+DQL：数据查询语言  select
+TCL：事务    commit   rollback
+```
+
+```python
+增:
+    1. 添加一个对象
+    	db.session.add()
+        -a = person()
+        -a.name = '1'
+        -a.age='1'
+        -db.session.add(a)
+        -db.session.commit()
+    2. 添加多个对象
+    	db.session.add_all()
+        -s = []
+        -for i in range(5):
+            -p = person()
+            -p.name='小%d' % i
+            -p.age='%d' % i
+            -s.append(p)
+        -db.session.add_all(s)
+        -db.session.commit()
+
+删:
+    db.session.delete(对象)   基于查询
+
+改:
+    db.session.add(对象)    基于查询
+```
+
+```python
+查:
+    1. 获取单个数据
+      -按主键值获取，获取不到不会报错
+    	person=Person.query.get(3)
+      -first
+    	person=Person.query.first()
+    2. 获取结果集
+      -x.query.all()  获取所有
+      -x.query.filter_by(条件)   按条件查询
+      -x.query.filter(条件)      按条件查询
+        	filter_by:只支持主键查找，直接用=进行等值查找
+            filter:比filter_by功能强大，用==进行等值查找，可根据其他字段的值进行查找，不过需要加数据库类名前缀，即Person.name==1
+```
+
+```python
+数据筛选:
+    order_by:
+        降序：person=Person.query.order_by('age')
+        升序：person=Person.query.order_by(db.desc('age'))
+   	limit:
+        取出前几行数据
+        person=Person.query.limit(2)
+    offset:
+        跳过前几行
+        person=Person.query.offset(2)
+
+    limit和offset可以不区分前后位置，因为offset优先级比limit高，不论位置怎样写，都是offset先执行
+    order_by需要先调用执行，不然会报错
+    
+sql关键字优先级：select  from  where  group_by  having   order_by
+```
+
+```python
+分页器pagination:
+    原生代码：
+    	page：页数     page_per：每页显示的数据量
+        person = Person.query.limit(page_per).offset(page_per*(page-1))
+    封装：
+    	person = Person.query.paginate(page.num,page_per,False).items
 ```
 
