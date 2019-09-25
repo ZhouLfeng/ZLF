@@ -523,7 +523,7 @@ jinjia2模板引擎：
         		语句
         {% else %}
         		语句
-        {% fi %}
+        {% endif %}
 过滤器：
 		{{ var|xxx|yyy|zzz }}
     	没有数量限制
@@ -889,6 +889,341 @@ sql关键字优先级：select  from  where  group_by  having   order_by
     	page：页数     page_per：每页显示的数据量
         person = Person.query.limit(page_per).offset(page_per*(page-1))
     封装：
-    	person = Person.query.paginate(page.num,page_per,False).items
+    	person = Person.query.paginate(page_num,page_per,False).items
+```
+
+### 分页器方法
+
+```python
+分页器：BaseQuery.pagination(page_num,page_per,False)
+方法(Pagination):
+		items------迭代(遍历数据)
+        pages------总页数
+        prev_num---上一页的页码
+        has_prev---是否有上一页
+        next_num---下一页的页码
+        has_next---是否有下一页
+        iter_pages-上一页与下一页之间的页码
+```
+
+### 数据定义
+
+一对多：
+
+```python
+1. 字段类型
+	Integer
+    String
+    Date
+    Boolean
+2. 约束
+	primary_key:主键
+    autoincrement:主键自增长
+    unique:唯一
+    default:默认值
+    index:索引
+	not null:不能为空
+    ForeignKey:外键---约束级联数据
+        		使用relationship实现级联数据获取
+            	格式:relationship('表名',brckref='表名',lazy=True/False)
+                    '表名':关联的表
+                    backref:提供反查询，可通过子表查找父表
+                    lazy:懒查询模式，只有在真正调用的时候才会对数据库进行调用
+```
+
+### 模型关系
+
+```python
+1. 模型定义
+	 	class Parent(db.Model):
+              id=db.Column(db.Integer,primary_key=True,autoincrement=True)
+              name=db.Column(db.String(30),unique=True)
+              children=db.relationship("Child",backref="parent",lazy=True)
+
+          class Child(db.Model):
+              id = db.Column(db.Integer, primary_key=True)
+              name = db.Column(db.String(30), unique=True)
+              parent_id = db.Column(db.Integer, db.ForeignKey('parent.id'))
+                
+2.应用
+		添加：
+    		p = Parent()
+        	p.name = '张三
+            c = Child()
+            c.name = '赵四'
+            c1 = Chile()
+            c1.name = '王五'
+            p.childen = [c,c1]
+            
+            db.session.add(p)
+            db.session.commit()
+        
+        查：
+        	主查从：
+            	clist = Child.query.filter(Parend.id == 1)
+            从查主：
+            	p = Parent.query.filter(Child.id == 1)
+```
+
+一对一：
+
+```python
+一对一需要在relationship中设置uselist=False，其他和一对多操作一样
+```
+
+多对多：
+
+```python
+1. 模型定义
+		  class User(db.Model):
+              id = db.Column(db.Integer,primary_key=True,autoincrement=True)
+              name = db.Column(db.String(32))
+              age = db.Column(db.Integer,default=18)
+
+          class Movie(db.Model):
+              id = db.Column(db.Integer,primary_key=True,autoincrement=True)
+              name = db.Column(db.String(32))
+
+          class Collection(db.Model):
+              id = db.Column(db.Integer,primary_key=True,autoincrement=True)
+              u_id = db.Column(db.Integer,db.ForeignKey(User.id))
+              m_id = db.Column(db.Integer,db.ForeignKey(Movie.id))
+               
+2.应用场景(购物车添加)
+		@blue.route('/getcollection/')
+        def getcollection():
+            u_id = int(request.args.get('u_id'))
+            m_id = int(request.args.get('m_id'))
+            c = Collection.query.filter(Collection.u_id == u_id).filter_by(m_id = m_id)
+
+            if c.count() > 0:
+                print(c.first().u_id,c.first().m_id)
+                # print(c)
+                # print(type(c))
+                # print('i am if')
+                return '已经添加到了购物车中'
+             else:
+                c1 = Collection()
+                c1.u_id = u_id
+                c1.m_id = m_id
+                db.session.add(c1)
+                db.session.commit()
+                return 'ok'
+```
+
+### flask-debugtoolbar
+
+```python
+安装：pip install flask-debugtoolbar
+ext中初始化：
+	app.debug = True
+    debugtoolbar = DebugToolBarExtension()
+    debugtoolbar.init_app(app=app)
+```
+
+### flask-bootstrap
+
+```python
+安装:pip install flask-bootstrap
+ext中初始化:
+    bootstrap(app=app)
+继承bootstrap模板:{% extends 'bootstrap/base.html' %}
+```
+
+### 缓存flask-cache
+
+```python
+目的：减少数据库的IO操作，优化加载
+实现方式，即cache存放位置:
+    1. 数据库(新建表)
+    2. 文件
+    3. 内存
+    4. 内存级数据库(redis)
+    
+实现流程:
+    1. 从路由函数进入程序
+    2. 路由函数到视图函数
+    3. 视图函数去缓存中查找
+    4. 缓存中找到，直接进行数据返回
+    5. 若没找到，去数据库中查找
+    6. 查找到之后，添加到缓存中
+    7. 返回数据到页面
+    
+安装:pip install flask-cache
+初始化:
+    指定使用的缓存方案
+    	cache = Cache(config={'CACHE_TYPE':'Redis'})
+        cache.init_app(app=app)
+使用:
+    必须在路由下面添加@cache.cached(timeout=30)
+    配置:cache = Cache(config={'CACHE_TYPE':'Redis'})
+        cache = Cache(config={'CACHE_KEY_PREFIX':'py'})
+用法:
+    1. 装饰器：@cache.cached(timeout=30)
+    2. 原生
+    	cache.get() ----获取缓存中的值
+        cache.set() ----设置缓存数据
+```
+
+### 钩子
+
+```python
+用法:
+    添加视图函数
+    	@blue.before_request
+        添加完之后就可以实现面向切面编程(纵向编程)
+        即在各个视图函数执行之前都会执行钩子函数
+```
+
+### 四大内置对象
+
+```python
+1. request:请求的所有信息
+2. response:服务端会话技术的接口
+3. config:当前项目的配置信息
+    		在模板中也可以直接调用config
+        	在py代码中需要调用current_app.config
+4. g:全局变量(global)
+    	可以将变量变为全局变量以供其他函数的使用
+        使用方式:g.变量名
+            例：
+            @blue.route('/g/')
+            def g():
+                g.ip = 1
+                return 'ok'
+
+            @blue.route('/g1/')
+            def g1():
+                print(g.ip)
+                return 'wa'
+```
+
+### 路径
+
+```python
+os模块:
+    os.path.join----------------拼接路径
+    os.path.abspath(__file__)---当前文件的绝对路径
+    os.path.dirname()-----------当前文件的上一级文件夹的路径
+
+项目文件路径:
+    变量放在settings配置文件中
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+若static文件夹在项目文件夹中，需配置static_folder:
+	app = Flask(__name__,static_folder=os.path.join(settings.BASE_DIR,'static'))
+    
+若templates文件夹在项目文件中，需配置templates_folder:
+    app = Flask(__naem__,templates_folder=os.path.join(settings.BASE_DIR,'templates'))
+```
+
+### 前后端分离
+
+```python
+整合网络和软件的一种架构模式(表现层状态转移)
+	每个URI代表一类资源，是对数据库的操作(增删改查)
+使用请求方式来作为动作标识(GET,POST,PUT,DELETE,PATCH)
+使用json来进行数据传输
+```
+
+原生
+
+```python
+概念：判断不同的请求方式，实现请求方法
+高内聚，低耦合
+
+通过判断request.method == '请求方式' 来进行分层，完成不同的操作
+```
+
+### flask-restful
+
+```python
+对原生的前后端分离的架构模式进行的框架简化
+
+安装：pip install flask-restful
+初始化：
+	urls-----在init中调用init_urls
+    	api = Api()
+        api.add_resource(Hello,'/hello/')
+        def init_urls(app):
+            api.init_app(app=app)
+   	apis基本用法
+    	继承来自Resource
+        class Hello(Resource):
+            # 实现请求的对应函数
+			def get(self):
+                data = {
+                    'msg':'get',
+                    'status':200
+                }
+                return data
+            
+            def post(self):
+                data = {
+                    'msg':'post',
+                    'status':200
+                }
+                return data
+```
+
+### 定制输入输出
+
+```python
+定制输出：
+	fields中的类型约束
+			String
+			Integer
+			Nested
+			List
+			Nested
+     @marshal_with基本使用
+    		类型括号中添加约束
+        		attribute=变量名----约束该变量
+            	default=值---------设置默认值
+      		例：
+            	r1Fields={
+                    'msg':fields.String(default = 'OK')
+                }
+            	 @marshal_with(r1Fields)
+                 class Hello(Resource):
+                 def get(self):
+                    data = {
+                        'msg':'get',
+                        'status':200
+                    }
+                    return data
+               
+            若预定义结构比返回数据字段多，则会给默认值
+            	Interger默认值：0
+                String默认值：null
+            若预定义结构比返回数据字段少，则自动过滤
+            
+            
+定制输入
+	使用：
+    	parser = reqparse.RequestParser()
+        parser.add_argument("c_name", type=str)
+        parser.add_argument("id", type=int, required=True, help="id 是必须的")
+		parse = parser.parse_args()
+		cat_name = parse.get("c_name")
+        id = parse.get("id")
+        print(id)
+        在对象中添加字段
+			对字段添加约束
+			default
+			required
+				必须的参数
+			help
+				id是必须的
+			action
+				action=append
+					c_name=tom&c_name=zs
+		继承
+			copy
+			可以对已有字段进行删除和更新
+			继承解析
+    - 在整个项目中，通用字段可以创建一个基parser
+    - 复用已有的部分参数转换数据结构
+			parse_c parser.copy()   parse_c.remove_argument('')
 ```
 
