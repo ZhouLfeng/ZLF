@@ -825,3 +825,357 @@ locals():
             <a href="{% url 'vie:index' num1=num1 num2=num2 %}">index</a>
 ```
 
+### request对象
+
+```python
+概念:django根据Http请求报文自动生成的一个对象，包含了请求各种信息
+属性:
+    path:请求的完整路径
+    method:
+        请求方式，常见有get，post
+        应用于前后端分离的底层，判断请求方式，执行对应的业务逻辑
+    GET:
+        queryset类字典结构
+        一个key可以对应多个值
+        get获取最后一个，getlist获取多个
+    POST:
+        类似字典的参数，包含了post请求方式的所有参数
+    encoding:编码方式
+    FILES:
+        类似字典的参数，包含了上传的文件
+        页面请求必须是post
+        form的属性enctype=multipart/form-data
+    COOKIES:
+        类似字典的参数，包含了上传的文件
+        cookie
+    session:
+        类似字典，表示会话
+    META:
+        应用于反爬虫，REMOTE_ADDR--请求IP，将这个IP拉入黑名单，实现反爬虫
+        ip--客户端的所有信息
+        print(request.META)
+        for key in request.META:
+            print(key,request.META.get(key))
+        print('Remote IP',request.META.get("REMOTE_ADDR"))
+```
+
+### HttpResponse
+
+```python
+服务器响应的数据类型
+响应类型主要分为两种:
+    1. HTML响应
+    2. JsonResponse(前后端分离)
+    
+HTML响应:
+    1. 基类 HttpResponse   不使用模板，直接HttpResponse()
+       def hello(request):
+            response = HttpResponse()
+            response.content = 'zs'
+            response.status_code = 404
+            response.write('hhhh')
+            response.flush()
+        return response
+    	
+        方法:
+            init		初始化内容
+            write(xxx)	直接写出文本
+            flush()		冲刷缓冲区
+            set_cookie(key,value='xx',max_age=None,exprise=None)	设置cookie
+            delete_cookie(key)	删除cookie
+     
+    2. render转发:
+        render(request,'index.html')
+        返回类型也是一个HttpResponse
+    
+    3. HttpResponseRedirect:
+        响应重定向:可以实现服务器内部跳转，同样也是HttpResponse的子类
+        return HttpResponseRedirect('/index')
+    	状态码：302
+        使用redirect方法就是HttpResponseRedirect的简写方式
+        
+        反向解析:
+            1. 页面中的反向解析:
+                url
+                语法：{% url 'namespace:name' %}
+                url 位置参数
+                {% url 'namespace:name' value1 value2 %}
+                url 关键字参数
+                {% url 'namespace:name' key1=value1 key2=value2 %}
+            2. python中的反向解析:
+                reverse
+                语法：reverse('namespace:name')
+                位置参数
+                reverse('namespace:name',args=[value1,value2])
+                关键字参数
+                reverse('namespace:name',kwargs={key1:value1,key2:value2})
+                
+JsonResponse:
+   JsonResponse也是HttpResponse的子类，和HttpResponse的区别:
+    1. 他的默认Content-Type 被设置为:application/json
+    2. 第一个参数，data应该是一个字典类型，当safe这个参数被设置为false，那data可以填入任何能被转换为json格式的对象，比如list，tuple，set。默认safe参数是true，如果传入的data数据类型不是字典，则会抛出TypeError的异常
+    def get_info(request):
+        data = {
+            'status':200,
+            'msg':'ok',
+        }
+        return JsonResponse(data=data)
+    
+    
+HttpResponse子类:
+    HttpResponseRedirect
+    	--302
+    HttpResponsePermanentRedirect
+    	--301，永久重定向
+    HttpResponseBadRequest
+    	--400
+    HttpResponseNotFound
+    	--404
+    HttpResponseForbidden
+    	--403  csrf 防跨站攻击
+    HttpResponseServerError
+    	--500
+    Http 404
+    	--Exception
+    	--raise 主动抛出异常
+```
+
+### 会话技术
+
+```python
+会话技术目的:
+    让服务器能够识别客户端
+    让web开发中的短连接实现长连接
+    请求生命周期从Request开始，到Response不会结束
+会话计数:cookie,session,token
+```
+
+##### cookie:
+
+```python
+	客户端会话技术，数据都存储在客户端，以key-value进行存储，支持过期时间man_age，默认请求会携带本网站的所有cookie，cookie不能跨域名，不能跨浏览器，cookie默认不支持中文，采用的是base64编码
+	cookie是服务器端创建，保存在浏览器中
+    cookie使用:
+        设置cookie：response.set_cookie(key,value)
+        获取cookie：name = request.COOKIES.get('name')
+        删除cookie：response.delete_cookie('name')
+        
+        可以加盐，加密 获取的时候需要进行解密
+        	加密  response.set_signed_cookie('name',name,'xxxx')
+            解密	
+            	 获取的是加盐之后的数据
+                	name = request.COOKIES.get('name')
+                 获取的是解密之后的数据
+                	name = request.get_signed_cookie('name',salt='xxxx')
+                    
+        通过response将cookie写在浏览器上，下一次访问，浏览器会根据不同的规则携带cookie过来
+        	max_age:整数，指定cookie过期时间，单位:秒
+            expries:整数，指定过期时间，还支持是一个daatetime或timedelta，可以指定一个具体时期时间
+            max_age和expries两个指定其中一个
+            过期时间的几个关键时间
+            	max_age设置为0 浏览器关闭失效
+                设置为none永不过期
+                expires = timedelta(days=10)  10天后过期
+```
+
+##### session
+
+```python
+	服务器会话技术，数据都存储再服务端，默认存在内存RAM，再django被持久化到了数据库中，该表叫做Django_Session，这个表中有三个字段，分别为Session_key,session_data,expris_date,
+Django中Session的默认过期时间是14天，支持过期，主键是字符串，默认做了数据安全，使用BASE64编码
+	-- 使用的base64之后，字符串可能会在最后面添加一个=
+    -- 在前部添加了一个混淆串
+    
+session的使用
+	设置session
+    	request.session['name']=name
+    获取session
+    	name = request.session.get('name')
+    使用session退出
+    	del requset.session['name']
+        	只删除session数据，cookie数据并没有删除，cookie数据为脏数据
+        response.delete_cookie('sessionid')
+        	只删除cookie中的数据，session中的数据并没有删除，session数据为脏数据
+        request.session.flush()
+        	冲刷数据，将session和cookie中的数据全部删除
+            
+    session常用操作
+    	get(key,default=None)  根据键获取会话的值
+        clear()   			   清除所有会话
+        flush()				   删除当前的会话数据并删除会话的cookie
+        delete request['session_id']      删除会话
+        session.session_key    获取session的key
+        request.session['name'] = name    数据存储到数据库中会进行编码，使用的是base64
+```
+
+##### token
+
+```python
+基本概念:
+    token意思为令牌，主要用来验证身份，facebook，twitter，google+，github等大型网站都在使用。比如传统的身份验证方式，token有拓展性强，安全性高的特点，非常适合用再web应用或者移动应用上，如果使用在移动端或客户端开发中，通常以json形式传输，服务端会话技术，自定义的session，给他一个不能重复的字符串，数据存储在服务器中
+```
+
+```python
+验证方法:使用基于Token的身份验证方式，在服务端不需要存储用户的登录记录，
+    流程:
+        1. 客户端使用用户名和密码请求登录
+        2. 服务端收到请求，去验证用户名和密码
+        3. 验证成功后，服务端会签发一个token，再把这个token发送给客户端
+        4. 客户端收到token以后把它存储起来，比如放在cookie或local storage中
+        5. 客户端每次向服务端请求资源的时候需要带着服务端签发的token
+        6. 服务端收到请求，然后去验证客户端请求里面带着的token，如果验证成功，就会向客户端返回请求的数据
+```
+
+```python
+python中常用token的生成方法:
+    1. binascii.b2a_base64(os.urandom(24))[:-1]
+    	eg:
+            import binascii
+            import os
+            binascii.b2a_base64(os.urandom(24))[:-1]
+            
+            结果:b'xDk/yJXSOdSz0cxAKgh//Oa6hPVjA8sW'
+            总结:这种算法的优点是性能快，缺点是有特殊字符，需要加replace进行特殊处理
+                
+    2. sha1(os.urandom(24)).hexdigest()
+    	eg:
+            import hashlib
+            import os
+            hashlib.sha1(os.urandom(24)).hexdigest()
+            
+            结果:4c9fa6cd2eb9e9256fbf473ea648ede2b3767551
+            总结:这种算法的优点是安全，不需要做特殊处理，缺点是覆盖范围差一点
+                
+    3. uuid.uuid4().hex
+    	eg:
+            import os
+            import uuid
+            uuid.uuid4().hex
+            
+            结果:8ceebd27b0e54374a7e1116a7ce03334
+            总结:uuid使用起来比较方便，缺点是安全性略差
+                
+    4. base64.b32encode(os.urandom(20))/base64.b64encode(os.urandom(24))
+    	eg:
+            import base64
+            import os
+            base64.b32encode(os.urandom(20))
+            base64.b64encode(os.urandom(20))
+            
+            结果:
+                b'JOTWTTGFSCHYCKIBJBKDN7X2QVCMZGY6'
+                b'7dHmA/lmuq+MloLuSjgkY16wGCw='
+            总结:可以用base64的地方，选择binascii.b2a_base64是不错的选择
+                
+    根据w3的sessionid的字串中对identifier的定义，sessionid中使用的是base64，但在cookie的值内使用需要注意'='这个特殊字符
+    如果需要安全字符，可以优先选择sha1加密
+```
+
+```python
+token应用:
+    import hashlib
+
+    # 待加密内容
+    strdata = "xiaojingjiaaseafe16516506ng"
+
+    h1 = hashlib.md5()
+    h1.update(strdata.encode(encoding='utf-8'))
+
+    strdata_tomd5 = h1.hexdigest()
+
+    print("原始内容：", strdata, ",加密后：", strdata_tomd5)
+
+    import time
+    import base64
+    import hmac
+
+
+    # 生产token
+    def generate_token(key, expire=3600):
+        r'''''
+            @Args:
+                key: str (用户给定的key，需要用户保存以便之后验证token,每次产生token时的key 都可以是同一个key)
+                expire: int(最大有效时间，单位为s)
+            @Return:
+                state: str
+        '''
+        ts_str = str(time.time() + expire)
+        ts_byte = ts_str.encode("utf-8")
+        sha1_tshexstr = hmac.new(key.encode("utf-8"), ts_byte, 'sha1').hexdigest()
+        token = ts_str + ':' + sha1_tshexstr
+        b64_token = base64.urlsafe_b64encode(token.encode("utf-8"))
+        return b64_token.decode("utf-8")
+
+
+    # 验证token
+    def certify_token(key, token):
+        r'''''
+            @Args:
+                key: str
+                token: str
+            @Returns:
+                boolean
+        '''
+        token_str = base64.urlsafe_b64decode(token).decode('utf-8')
+        token_list = token_str.split(':')
+        if len(token_list) != 2:
+            return False
+        ts_str = token_list[0]
+        if float(ts_str) < time.time():
+            # token expired
+            return False
+        known_sha1_tsstr = token_list[1]
+        sha1 = hmac.new(key.encode("utf-8"), ts_str.encode('utf-8'), 'sha1')
+        calc_sha1_tsstr = sha1.hexdigest()
+        if calc_sha1_tsstr != known_sha1_tsstr:
+            # token certification failed
+            return False
+            # token certification success
+        return True
+
+
+    key = "xiaojingjing"
+    print("key：", key)
+    user_token = generate_token(key=key)
+
+    print("加密后：", user_token)
+    user_de = certify_token(key=key, token=user_token)
+    print("验证结果：", user_de)
+
+    key = "xiaoqingqing"
+    user_de = certify_token(key=key, token=user_token)
+    print("验证结果：", user_de)
+```
+
+##### session和cookie的区别
+
+```python
+1. cookie数据存储在客户端上，session数据存放在服务器上
+2. cookie不是很安全，可以分析存放在本地的cookie来进行cookie欺骗，考虑到安全性，应当选用session
+3. session会在一定时间内保存在服务器上，当访问增多，会比较占用服务器的性能，为了减轻服务器的压力，应当选用cookie
+```
+
+##### session和token的区别
+
+```python
+1. 作为身份认证，token安全性比session好，因为每个请求都会签名，还能防止监听以及重放攻击
+2. session是一种http存储机制，目的是为无状态的http提供持久机制，session认证只是简单的把user信息存放到session里，因为SID的不可预测性，暂且认为安全。这是一种认证手段，但是如果有了某个人的SID，就相当于拥有该user的全部权力，SID不应该共享给其他网站或第三方
+3. token，如果指的是oauth token 或类似的机制的话，提供的是认证和授权，认证是针对用户，授权是针对app，其目的是让某app有权利访问某用户的信息，这里的token是唯一的，不可以转移到其他app上，也不可以转到其他用户上
+```
+
+### csrf豁免
+
+```python
+csrf:
+    防跨站攻击
+    实现机制:
+        页面中存在{% csrf_token %}时
+        在渲染的时候，会向Response中添加csrftoken的cookie
+        在提交的时候，会被添加到请求体中，会被验证有效性
+        
+    解决csrf的问题/csrf豁免:
+        1. 注释中间件
+        2. 在表单中添加{% csrf_token %}
+        3. 在方法上添加 @csrf_exempt
+```
+
